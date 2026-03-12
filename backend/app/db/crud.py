@@ -38,6 +38,39 @@ async def create_event(db: AsyncSession, **kwargs) -> Event:
     return event
 
 
+async def get_all_events(
+    db: AsyncSession,
+    organizer_name: str | None = None,
+    status: str | None = None,
+) -> Sequence[Event]:
+    """
+    List all events, optionally filtered by organizer_name and/or status.
+
+    Returns events ordered by created_at descending (newest first).
+    """
+    from sqlalchemy import desc
+    stmt = select(Event).order_by(desc(Event.created_at))
+    if organizer_name:
+        stmt = stmt.where(Event.organizer_name == organizer_name)
+    if status:
+        stmt = stmt.where(Event.status == status)
+    result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+async def update_event_status(
+    db: AsyncSession, event_id: int, status: str
+) -> Event | None:
+    """Update the status of an event (active -> completed -> archived)."""
+    event = await get_event_context(db, event_id)
+    if event is None:
+        return None
+    event.status = status
+    await db.commit()
+    await db.refresh(event)
+    return event
+
+
 async def update_event_schedule(
     db: AsyncSession, event_id: int, new_schedule: dict
 ) -> Event | None:
@@ -145,9 +178,9 @@ async def create_unresolved_query(
 
 
 async def resolve_query(
-    db: AsyncSession, query_id: int
+    db: AsyncSession, query_id: int, organizer_answer: str | None = None
 ) -> UnresolvedQuery | None:
-    """Mark an unresolved query as resolved."""
+    """Mark an unresolved query as resolved and optionally store the answer."""
     result = await db.execute(
         select(UnresolvedQuery).where(UnresolvedQuery.query_id == query_id)
     )
@@ -155,6 +188,8 @@ async def resolve_query(
     if query is None:
         return None
     query.status = "Resolved"
+    if organizer_answer is not None:
+        query.organizer_answer = organizer_answer
     await db.commit()
     await db.refresh(query)
     return query
@@ -168,6 +203,20 @@ async def get_unresolved_queries(
     if status:
         stmt = stmt.where(UnresolvedQuery.status == status)
     result = await db.execute(stmt)
+    return result.scalars().all()
+
+
+async def get_resolved_queries(
+    db: AsyncSession, event_id: int
+) -> Sequence[UnresolvedQuery]:
+    """Fetch all resolved queries for an event (for public FAQ)."""
+    result = await db.execute(
+        select(UnresolvedQuery).where(
+            UnresolvedQuery.event_id == event_id,
+            UnresolvedQuery.status == "Resolved",
+            UnresolvedQuery.organizer_answer.isnot(None),
+        )
+    )
     return result.scalars().all()
 
 
