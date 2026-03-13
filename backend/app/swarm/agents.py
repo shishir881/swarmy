@@ -424,7 +424,35 @@ async def email_agent(state: EventState) -> dict[str, Any]:
     csv_contacts = state.get("email_csv_data") or []
     is_update = False
 
-    # Collect the distinct segments present in the CSV
+    # When chained from Scheduler/Emergency (no CSV provided), fetch
+    # joined participants from the database so they receive the update.
+    if not csv_contacts and (
+        state.get("schedule_changed_flag") or state.get("emergency_handled_flag")
+    ):
+        is_update = True
+        try:
+            from app.db.session import async_session_factory
+            from app.db.crud import get_participants_by_event
+
+            async with async_session_factory() as db:
+                participants = await get_participants_by_event(db, state["event_id"])
+                csv_contacts = [
+                    {
+                        "name": p.name,
+                        "email": p.email,
+                        "segment": p.segment_category or "General",
+                    }
+                    for p in participants
+                ]
+        except Exception as e:
+            csv_contacts = []
+            # Log the error but don't crash the agent
+            import logging
+            logging.getLogger(__name__).warning(
+                f"[Email_Agent] Could not fetch participants from DB: {e}"
+            )
+
+    # Collect the distinct segments present in the contacts
     if csv_contacts:
         segments = sorted({
             (c.get("segment") or c.get("status") or "General").title()
