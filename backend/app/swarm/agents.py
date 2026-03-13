@@ -412,19 +412,37 @@ async def email_agent(state: EventState) -> dict[str, Any]:
     """
     Format and send personalized bulk emails segmented by audience type.
 
-    The LLM generates a unique subject + body for each segment found in
-    the CSV. Recipients are filtered per segment before dispatch, so no
-    participant receives a generic "one-size-fits-all" message.
-
-    When invoked via the dedicated /run_email endpoint:
-      - email_csv_data supplies the recipient list parsed from CSV
-      - email_sample_template provides a style/tone reference
+    Supports two modes:
+      - CSV mode: When email_csv_data is populated (via /run_email), sends
+        invitations to all CSV contacts.
+      - Participant mode: When email_csv_data is empty (chained from
+        emergency/scheduler agents), fetches joined participants from the
+        DB and sends updates only to them.
     """
     llm = _get_llm()
 
     csv_contacts = state.get("email_csv_data") or []
+    is_update = False
 
-    # Collect the distinct segments present in the CSV
+    # If no CSV data, fetch joined participants from the DB
+    if not csv_contacts:
+        from app.db.session import async_session_factory
+        from app.db import crud
+
+        async with async_session_factory() as db:
+            participants = await crud.get_participants_by_event(db, state["event_id"])
+            if participants:
+                csv_contacts = [
+                    {
+                        "email": p.email,
+                        "name": p.name,
+                        "segment": p.segment_category or "general",
+                    }
+                    for p in participants
+                ]
+                is_update = True
+
+    # Collect the distinct segments present in the contacts
     if csv_contacts:
         segments = sorted({
             (c.get("segment") or c.get("status") or "General").title()
@@ -445,10 +463,18 @@ async def email_agent(state: EventState) -> dict[str, Any]:
 
     segments_json_keys = ", ".join(f'"{s}"' for s in segments)
 
+    # Adjust prompt context based on whether this is an invitation or update
+    email_type_context = (
+        "You are sending an UPDATE/ALERT email to participants who have already joined this event."
+        if is_update
+        else "You are sending INVITATION emails to potential attendees."
+    )
+
     system_prompt = f"""You are the Email Communication Agent for an event management system.
 
 EVENT NAME: {event_name}
 
+EMAIL TYPE: {email_type_context}
 SCHEDULE CHANGED: {state.get('schedule_changed_flag', False)}
 EMERGENCY FOLLOW-UP: {state.get('emergency_handled_flag', False)}
 RECIPIENT SEGMENTS: {segments_json_keys}{template_section}
@@ -501,7 +527,7 @@ Output ONLY the JSON object — no preamble, no explanation, no markdown fences.
         subject = email_data.get("subject", "Event Update Notification")
         body = email_data.get("body", "")
 
-        # Filter CSV contacts whose segment matches this key (case-insensitive)
+        # Filter contacts whose segment matches this key (case-insensitive)
         if csv_contacts:
             segment_recipients = [
                 c["email"] for c in csv_contacts
@@ -510,7 +536,7 @@ Output ONLY the JSON object — no preamble, no explanation, no markdown fences.
                 == segment_name.lower()
             ]
         else:
-            segment_recipients = ["participant@example.com"]
+            segment_recipients = []
 
         if not segment_recipients:
             send_log_lines.append(f"  - Segment '{segment_name}': 0 recipients (skipped)")
@@ -528,8 +554,9 @@ Output ONLY the JSON object — no preamble, no explanation, no markdown fences.
             f" | Subject: \"{subject}\""
         )
 
+    audience_label = "participant update" if is_update else "invitation"
     log_msg = (
-        f"[Email_Agent] Segmented email campaign complete. "
+        f"[Email_Agent] Segmented {audience_label} email campaign complete. "
         f"{total_sent} total recipient(s) across {len(send_log_lines)} segment(s).\n"
         + "\n".join(send_log_lines)
     )

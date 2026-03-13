@@ -54,11 +54,9 @@ async def join_event(
     """
     Participant joins an event using the code shared by the organizer.
 
-    Looks up the event code, validates it, and returns enough event
-    context to render the participant portal (name, schedule, etc.).
-    The participant's email is accepted but not stored here — it is
-    used only to personalize the welcome message and scope future
-    chat/report calls to the correct event.
+    Looks up the event code, validates it, persists the participant
+    (idempotent — skips if the email is already registered), and returns
+    enough event context to render the participant portal.
     """
     try:
         # Look up the code
@@ -77,6 +75,21 @@ async def join_event(
         event = await crud.get_event_context(db, event_code.event_id)
         if event is None:
             raise HTTPException(status_code=404, detail="Event not found.")
+
+        # Persist participant (idempotent — skip if already joined)
+        existing = await crud.get_participant_by_email(db, event.event_id, request.email)
+        if existing is None:
+            participant_name = getattr(request, "name", "") or request.email.split("@")[0]
+            await crud.create_participant(
+                db=db,
+                event_id=event.event_id,
+                name=participant_name.strip(),
+                email=request.email,
+                segment_category="general",
+            )
+            logger.info(f"Participant {request.email} registered for event {event.event_id}")
+        else:
+            logger.info(f"Participant {request.email} already registered for event {event.event_id}, skipping")
 
         logger.info(f"Participant {request.email} joined event {event.event_id} via code {request.code}")
 

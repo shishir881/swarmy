@@ -289,6 +289,19 @@ async def create_participant(
     return participant
 
 
+async def get_participant_by_email(
+    db: AsyncSession, event_id: int, email: str
+) -> Participant | None:
+    """Check if a participant with the given email is already registered for the event."""
+    result = await db.execute(
+        select(Participant).where(
+            Participant.event_id == event_id,
+            Participant.email == email,
+        )
+    )
+    return result.scalar_one_or_none()
+
+
 # ---------------------------------------------------------------------------
 # Agent-Specific Log CRUD
 # ---------------------------------------------------------------------------
