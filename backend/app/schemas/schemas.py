@@ -231,6 +231,10 @@ class EmergencyAgentResult(BaseModel):
     """Response from the emergency agent."""
     event_id: int
     emergency_handled: bool
+    emergency_alert_message: str = Field(
+        default="",
+        description="High-visibility emergency alert text for organizer dashboard UI",
+    )
     logs: list[str] = Field(default_factory=list)
 
 

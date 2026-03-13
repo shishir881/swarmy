@@ -352,6 +352,7 @@ async def trigger_swarm(
             "urgency_score": 0,
             "schedule_changed_flag": False,
             "emergency_handled_flag": False,
+            "emergency_alert_message": "",
             "master_schedule": event.master_schedule or {},
             "budget_estimate_report": event.budget_report or {},
             "direct_route": "",
@@ -571,6 +572,7 @@ async def run_marketing_agent(
             "urgency_score": 0,
             "schedule_changed_flag": False,
             "emergency_handled_flag": False,
+            "emergency_alert_message": "",
             "master_schedule": event.master_schedule or {},
             "budget_estimate_report": event.budget_report or {},
             "direct_route": "marketing",
@@ -686,6 +688,7 @@ async def run_email_agent(
             "urgency_score": 0,
             "schedule_changed_flag": False,
             "emergency_handled_flag": False,
+            "emergency_alert_message": "",
             "master_schedule": event.master_schedule or {},
             "budget_estimate_report": event.budget_report or {},
             "direct_route": "email",
@@ -763,6 +766,7 @@ async def run_scheduler_agent(
             "urgency_score": 0,
             "schedule_changed_flag": False,
             "emergency_handled_flag": False,
+            "emergency_alert_message": "",
             "master_schedule": event.master_schedule or {},
             "budget_estimate_report": event.budget_report or {},
             "direct_route": "scheduler",
@@ -820,7 +824,7 @@ async def run_emergency_agent(
     """
     Invoke the Emergency Info agent directly.
 
-    Dispatches SMS + email alerts to event officials immediately.
+    Generates a high-visibility dashboard alert for organizers.
     """
     try:
         event = await crud.get_event_context(db, event_id)
@@ -843,9 +847,10 @@ async def run_emergency_agent(
             "urgency_score": 10,
             "schedule_changed_flag": False,
             "emergency_handled_flag": False,
+            "emergency_alert_message": "",
             "master_schedule": event.master_schedule or {},
             "budget_estimate_report": event.budget_report or {},
-            "direct_route": "emergency_info",
+            "direct_route": "",
             "marketing_prompt": "",
             "email_csv_data": [],
             "email_sample_template": "",
@@ -875,6 +880,7 @@ async def run_emergency_agent(
         return EmergencyAgentResult(
             event_id=event_id,
             emergency_handled=result.get("emergency_handled_flag", False),
+            emergency_alert_message=result.get("emergency_alert_message", ""),
             logs=log_messages,
         )
     except HTTPException:
@@ -921,6 +927,7 @@ async def run_budget_agent(
             "urgency_score": 0,
             "schedule_changed_flag": False,
             "emergency_handled_flag": False,
+            "emergency_alert_message": "",
             "master_schedule": event.master_schedule or {},
             "budget_estimate_report": {},
             "direct_route": "budget_finance",
