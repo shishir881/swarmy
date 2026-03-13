@@ -278,3 +278,55 @@ class JoinEventResponse(BaseModel):
     organizer_name: str
     master_schedule: dict[str, Any]
     message: str
+
+
+class EventInfoResponse(BaseModel):
+    """Full event info returned to participants."""
+    event_id: int
+    event_name: str
+    organizer_name: str
+    event_rules_and_context: str
+    total_budget_allocated: float
+    master_schedule: dict[str, Any]
+
+    model_config = {"from_attributes": True}
+
+
+# ---------------------------------------------------------------------------
+# Organizer Event History Schemas
+# ---------------------------------------------------------------------------
+
+class EventListItem(BaseModel):
+    """Summary item for the organizer's event list / history."""
+    event_id: int
+    event_name: str
+    organizer_name: str
+    status: str
+    created_at: datetime
+    total_budget_allocated: float
+
+    model_config = {"from_attributes": True}
+
+
+class EventDetailResponse(BaseModel):
+    """Full event detail with related data for the organizer dashboard."""
+    event_id: int
+    event_name: str
+    organizer_name: str
+    event_rules_and_context: str
+    total_budget_allocated: float
+    status: str
+    created_at: datetime
+    master_schedule: dict[str, Any]
+    budget_report: dict[str, Any]
+    participant_count: int
+    ticket_count: int
+    unresolved_query_count: int
+
+
+class EventStatusUpdate(BaseModel):
+    """Request body for updating event status."""
+    status: str = Field(
+        ..., pattern="^(active|completed|archived)$",
+        description="New status: 'active', 'completed', or 'archived'"
+    )

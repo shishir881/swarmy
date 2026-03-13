@@ -34,6 +34,8 @@ class Event(Base):
     organizer_name = Column(String(255), nullable=False)
     event_rules_and_context = Column(Text, nullable=True, default="")
     total_budget_allocated = Column(Float, nullable=False, default=0.0)
+    status = Column(String(50), nullable=False, default="active")
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     master_schedule = Column(JSON, nullable=True, default=dict)
     budget_report = Column(JSON, nullable=True, default=dict)
 
@@ -75,6 +77,7 @@ class UnresolvedQuery(Base):
     query_id = Column(Integer, primary_key=True, autoincrement=True)
     event_id = Column(Integer, ForeignKey("events.event_id", ondelete="CASCADE"), nullable=False)
     question_text = Column(String(1000), nullable=False)
+    organizer_answer = Column(Text, nullable=True, default=None)
     status = Column(String(50), nullable=False, default="Pending")
 
     event = relationship("Event", back_populates="unresolved_queries")

@@ -90,6 +90,37 @@ def send_emergency_sms(
     }
 
 
+def predict_posting_times(
+    event_name: str,
+    target_audience: str = "general",
+) -> dict[str, Any]:
+    """
+    Mock social-media posting-time predictor.
+
+    Simulates an analytics engine that recommends optimal posting
+    windows for maximum engagement.
+
+    Args:
+        event_name: Name of the event for context.
+        target_audience: Audience segment to optimize for.
+
+    Returns:
+        A dict with recommended posting windows.
+    """
+    # Simulated optimal time slots
+    recommended_slots = [
+        {"day": "Monday", "time": "09:00 AM", "platform": "LinkedIn", "expected_reach": random.randint(500, 5000)},
+        {"day": "Wednesday", "time": "12:30 PM", "platform": "Twitter/X", "expected_reach": random.randint(1000, 8000)},
+        {"day": "Friday", "time": "06:00 PM", "platform": "Instagram", "expected_reach": random.randint(2000, 10000)},
+        {"day": "Saturday", "time": "10:00 AM", "platform": "Facebook", "expected_reach": random.randint(800, 6000)},
+    ]
+
+    return {
+        "event_name": event_name,
+        "target_audience": target_audience,
+        "recommended_posting_slots": recommended_slots,
+        "analysis_note": f"[MOCK] Optimal posting times computed for '{event_name}' targeting '{target_audience}' audience.",
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -122,7 +153,12 @@ def predict_best_posting_times(
     # Check if models are loaded
     if _ML_MODEL is None or _TFIDF_VECTORIZER is None or _MODEL_COLUMNS is None:
         error_msg = "❌ ML models not available. Cannot predict posting times."
-        return error_msg, {"hours": [{"hour": h, "engagement": "Unknown"} for h in range(24)]}
+        return error_msg, {
+            "hours": [
+                {"hour": h, "engagement": "Unknown", "engagement_score": 0.0}
+                for h in range(24)
+            ]
+        }
 
     try:
         # Calculate text statistics
@@ -166,18 +202,38 @@ def predict_best_posting_times(
         # Ensure column order matches training
         X_final = X_final[_MODEL_COLUMNS]
 
-        # Make predictions for all 24 hours
-        predictions = _ML_MODEL.predict(X_final)
+        # Predict class probabilities for all 24 hours
+        probabilities = _ML_MODEL.predict_proba(X_final)
+        model_classes = [str(c) for c in _ML_MODEL.classes_]
+
+        # Expected-value weights for engagement classes
+        class_weights = {
+            "Low": 1,
+            "Medium": 2,
+            "High": 3,
+            "Viral": 4,
+        }
 
         # Build hourly data structure for bar chart
         hourly_data = []
         viral_hours = []
         high_hours = []
 
-        for hour, tier in enumerate(predictions):
+        for hour, probs in enumerate(probabilities):
+            # Dominant class (argmax)
+            dominant_idx = max(range(len(probs)), key=lambda idx: probs[idx])
+            tier = model_classes[dominant_idx]
+
+            # Expected-value engagement score from class probabilities
+            engagement_score = sum(
+                float(prob) * float(class_weights.get(label, 0))
+                for prob, label in zip(probs, model_classes)
+            )
+
             hourly_data.append({
                 "hour": hour,
-                "engagement": tier  # Viral, High, Medium, Low
+                "engagement": tier,
+                "engagement_score": round(engagement_score, 2),
             })
             if tier == 'Viral':
                 viral_hours.append(f"{hour:02d}:00")
@@ -209,5 +265,10 @@ def predict_best_posting_times(
 
     except Exception as e:
         error_msg = f"❌ Error during ML prediction: {str(e)}"
-        return error_msg, {"hours": [{"hour": h, "engagement": "Unknown"} for h in range(24)]}
+        return error_msg, {
+            "hours": [
+                {"hour": h, "engagement": "Unknown", "engagement_score": 0.0}
+                for h in range(24)
+            ]
+        }
 

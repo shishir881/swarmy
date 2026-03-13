@@ -31,7 +31,10 @@ from app.schemas.schemas import (
     EmergencyAgentResult,
     EventCodeResponse,
     EventCreate,
+    EventDetailResponse,
+    EventListItem,
     EventResponse,
+    EventStatusUpdate,
     MarketingRequest,
     MarketingResult,
     ResolveQueryRequest,
@@ -74,6 +77,40 @@ def _generate_code(event_name: str) -> str:
 def _join_link(code: str) -> str:
     """Return the frontend participant portal URL for this code."""
     return f"/join/{code}"
+
+
+# ---------------------------------------------------------------------------
+# GET /organizer/events  — list all events (with optional filters)
+# ---------------------------------------------------------------------------
+
+@events_router.get("", response_model=list[EventListItem])
+async def list_events(
+    status: str | None = None,
+    organizer_name: str | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    List all events, optionally filtered by status and/or organizer_name.
+
+    Returns a summary list ordered by created_at descending (newest first).
+    Use ?status=active|completed|archived to filter.
+    """
+    try:
+        events = await crud.get_all_events(db, organizer_name=organizer_name, status=status)
+        return [
+            EventListItem(
+                event_id=e.event_id,
+                event_name=e.event_name,
+                organizer_name=e.organizer_name,
+                status=e.status or "active",
+                created_at=e.created_at,
+                total_budget_allocated=e.total_budget_allocated,
+            )
+            for e in events
+        ]
+    except Exception as e:
+        logger.error(f"Error listing events: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +166,99 @@ async def create_event(
         )
     except Exception as e:
         logger.error(f"Error creating event: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# GET /organizer/events/{event_id}/detail  — full event detail with counts
+# ---------------------------------------------------------------------------
+
+@router.get("/detail", response_model=EventDetailResponse)
+async def get_event_detail(
+    event_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Fetch full event details including participant, ticket,
+    and unresolved query counts for the organizer dashboard.
+    """
+    try:
+        event = await crud.get_event_context(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=404, detail=f"Event {event_id} not found.")
+
+        from sqlalchemy import func, select as sa_select
+        from app.db.models import Participant, Ticket, UnresolvedQuery
+
+        p_count = (await db.execute(
+            sa_select(func.count()).where(Participant.event_id == event_id)
+        )).scalar() or 0
+
+        t_count = (await db.execute(
+            sa_select(func.count()).where(Ticket.event_id == event_id)
+        )).scalar() or 0
+
+        uq_count = (await db.execute(
+            sa_select(func.count()).where(
+                UnresolvedQuery.event_id == event_id,
+                UnresolvedQuery.status == "Pending",
+            )
+        )).scalar() or 0
+
+        return EventDetailResponse(
+            event_id=event.event_id,
+            event_name=event.event_name,
+            organizer_name=event.organizer_name,
+            event_rules_and_context=event.event_rules_and_context or "",
+            total_budget_allocated=event.total_budget_allocated,
+            status=event.status or "active",
+            created_at=event.created_at,
+            master_schedule=event.master_schedule or {},
+            budget_report=event.budget_report or {},
+            participant_count=p_count,
+            ticket_count=t_count,
+            unresolved_query_count=uq_count,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching detail for event {event_id}: {e}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+
+
+# ---------------------------------------------------------------------------
+# PATCH /organizer/events/{event_id}/status  — update event status
+# ---------------------------------------------------------------------------
+
+@router.patch("/status", response_model=EventListItem)
+async def update_event_status(
+    event_id: int,
+    request: EventStatusUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Update the status of an event (active → completed → archived).
+
+    Use this to mark an event as completed after it ends, or archive
+    old events. Archived events are still accessible in the history.
+    """
+    try:
+        event = await crud.update_event_status(db, event_id, request.status)
+        if event is None:
+            raise HTTPException(status_code=404, detail=f"Event {event_id} not found.")
+
+        return EventListItem(
+            event_id=event.event_id,
+            event_name=event.event_name,
+            organizer_name=event.organizer_name,
+            status=event.status,
+            created_at=event.created_at,
+            total_budget_allocated=event.total_budget_allocated,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating status for event {event_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
@@ -319,7 +449,7 @@ async def resolve_unresolved_query(
             answer=request.organizer_answer,
         )
 
-        await crud.resolve_query(db, request.query_id)
+        await crud.resolve_query(db, request.query_id, organizer_answer=request.organizer_answer)
 
         await crud.create_swarm_log(
             db=db,

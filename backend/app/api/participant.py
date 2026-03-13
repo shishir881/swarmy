@@ -22,6 +22,7 @@ from app.db.models import EventCode
 from app.schemas.schemas import (
     ChatRequest,
     ChatResponse,
+    EventInfoResponse,
     IssueReportRequest,
     JoinEventRequest,
     JoinEventResponse,
@@ -124,9 +125,8 @@ async def get_event_timeline(
         raise HTTPException(status_code=500, detail="Internal server error fetching timeline.")
 
 
-# ---------------------------------------------------------------------------
+
 # POST /events/{event_id}/chat
-# ---------------------------------------------------------------------------
 
 @router.post("/chat", response_model=ChatResponse)
 async def chat_with_rag(
@@ -177,9 +177,8 @@ async def chat_with_rag(
         raise HTTPException(status_code=500, detail="Internal server error processing chat.")
 
 
-# ---------------------------------------------------------------------------
+
 # POST /events/{event_id}/report
-# ---------------------------------------------------------------------------
 
 @router.post("/report", response_model=SwarmResult)
 async def report_issue(
@@ -265,3 +264,36 @@ async def report_issue(
     except Exception as e:
         logger.error(f"Error reporting issue for event {event_id}: {e}")
         raise HTTPException(status_code=500, detail=f"Internal server error processing issue report: {str(e)}")
+
+
+
+# GET /events/{event_id}/info  — full event info for participant portal
+
+@router.get("/info", response_model=EventInfoResponse)
+async def get_event_info(
+    event_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    """
+    Return full event details for the participant portal.
+
+    Includes event name, organizer, rules/context, budget, and schedule.
+    """
+    try:
+        event = await crud.get_event_context(db, event_id)
+        if event is None:
+            raise HTTPException(status_code=404, detail=f"Event {event_id} not found.")
+
+        return EventInfoResponse(
+            event_id=event.event_id,
+            event_name=event.event_name,
+            organizer_name=event.organizer_name,
+            event_rules_and_context=event.event_rules_and_context or "",
+            total_budget_allocated=event.total_budget_allocated,
+            master_schedule=event.master_schedule or {},
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error fetching info for event {event_id}: {e}")
+        raise HTTPException(status_code=500, detail="Internal server error fetching event info.")

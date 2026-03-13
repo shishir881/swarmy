@@ -168,3 +168,4 @@ cython_debug/
 # Project specifics
 event_command_center.db
 chroma_data/
+frontend/

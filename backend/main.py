@@ -12,7 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 
 from app.api.organizer import router as organizer_router, events_router
-from app.api.participant import router as participant_router
+from app.api.participant import router as participant_router, join_router
 from app.core.rag import get_chroma_client
 from app.db.models import Base
 from app.db.session import engine, async_session_factory
@@ -108,6 +108,7 @@ app.add_middleware(
 
 # Mount routers under /api/v1/
 app.include_router(participant_router, prefix="/api/v1")
+app.include_router(join_router, prefix="/api/v1")
 app.include_router(events_router, prefix="/api/v1")
 app.include_router(organizer_router, prefix="/api/v1")
 
