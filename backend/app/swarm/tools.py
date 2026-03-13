@@ -7,7 +7,10 @@ return structured results for agent consumption.
 
 import json
 import random
+import smtplib
 from datetime import datetime, timezone
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from pathlib import Path
 from typing import Any
 
@@ -39,9 +42,10 @@ def send_bulk_email(
     body: str,
 ) -> dict[str, Any]:
     """
-    Mock bulk email sender.
+    Send real emails via Gmail SMTP.
 
-    In production, this would integrate with SendGrid, SES, etc.
+    Uses the SMTP_USER and SMTP_APP_PASSWORD from app settings.
+    Falls back to mock mode if credentials are not configured.
 
     Args:
         event_id: The tenant event identifier.
@@ -52,13 +56,80 @@ def send_bulk_email(
     Returns:
         A dict with delivery status and count.
     """
+    from app.config import settings
+
+    smtp_user = settings.SMTP_USER
+    smtp_password = settings.SMTP_APP_PASSWORD
+
+    # Fall back to mock if credentials not set
+    if not smtp_user or not smtp_password:
+        print(f"[Email Tool] SMTP not configured — MOCK sending to {len(recipients)} recipients.")
+        return {
+            "status": "mock_sent",
+            "event_id": event_id,
+            "recipients_count": len(recipients),
+            "subject": subject,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "message": f"[MOCK] SMTP not configured. Would send to {len(recipients)} recipients.",
+        }
+
+    sent_count = 0
+    failed: list[str] = []
+
+    try:
+        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+            server.starttls()
+            server.login(smtp_user, smtp_password)
+
+            for recipient in recipients:
+                try:
+                    msg = MIMEMultipart("alternative")
+                    msg["From"] = smtp_user
+                    msg["To"] = recipient
+                    msg["Subject"] = subject
+
+                    # Attach both plain text and HTML versions
+                    msg.attach(MIMEText(body, "plain"))
+                    html_body = body.replace("\\n", "<br>").replace("\n", "<br>")
+                    msg.attach(MIMEText(f"<html><body>{html_body}</body></html>", "html"))
+
+                    server.sendmail(smtp_user, recipient, msg.as_string())
+                    sent_count += 1
+                    print(f"[Email Tool] ✅ Sent to {recipient}")
+                except Exception as e:
+                    failed.append(recipient)
+                    print(f"[Email Tool] ❌ Failed to send to {recipient}: {e}")
+
+    except smtplib.SMTPAuthenticationError:
+        print("[Email Tool] ❌ Gmail authentication failed. Check SMTP_USER and SMTP_APP_PASSWORD.")
+        return {
+            "status": "auth_error",
+            "event_id": event_id,
+            "recipients_count": 0,
+            "subject": subject,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "message": "Gmail authentication failed. Verify your App Password.",
+        }
+    except Exception as e:
+        print(f"[Email Tool] ❌ SMTP connection error: {e}")
+        return {
+            "status": "connection_error",
+            "event_id": event_id,
+            "recipients_count": sent_count,
+            "subject": subject,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+            "message": f"SMTP error: {str(e)}. {sent_count} sent before failure.",
+        }
+
+    status = "sent" if not failed else "partial"
     return {
-        "status": "sent",
+        "status": status,
         "event_id": event_id,
-        "recipients_count": len(recipients),
+        "recipients_count": sent_count,
+        "failed_recipients": failed,
         "subject": subject,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "message": f"[MOCK] Bulk email sent to {len(recipients)} recipients for event {event_id}.",
+        "message": f"Email sent to {sent_count}/{len(recipients)} recipients for event {event_id}.",
     }
 
 

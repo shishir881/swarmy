@@ -270,8 +270,9 @@ class JoinEventRequest(BaseModel):
     """Request body for a participant joining via code."""
     code: str = Field(..., min_length=3, max_length=20, description="Event join code shared by organizer")
     email: str = Field(..., max_length=255, description="Participant's email address")
- 
- 
+    name: Optional[str] = Field(None, max_length=255, description="Participant's name")
+
+
 class JoinEventResponse(BaseModel):
     """
     Response after a participant successfully joins via code.

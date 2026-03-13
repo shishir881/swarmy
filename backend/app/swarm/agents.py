@@ -424,25 +424,7 @@ async def email_agent(state: EventState) -> dict[str, Any]:
     csv_contacts = state.get("email_csv_data") or []
     is_update = False
 
-    # If no CSV data, fetch joined participants from the DB
-    if not csv_contacts:
-        from app.db.session import async_session_factory
-        from app.db import crud
-
-        async with async_session_factory() as db:
-            participants = await crud.get_participants_by_event(db, state["event_id"])
-            if participants:
-                csv_contacts = [
-                    {
-                        "email": p.email,
-                        "name": p.name,
-                        "segment": p.segment_category or "general",
-                    }
-                    for p in participants
-                ]
-                is_update = True
-
-    # Collect the distinct segments present in the contacts
+    # Collect the distinct segments present in the CSV
     if csv_contacts:
         segments = sorted({
             (c.get("segment") or c.get("status") or "General").title()

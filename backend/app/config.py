@@ -23,6 +23,10 @@ class Settings(BaseSettings):
     # LLM model identifier (Groq-hosted)
     LLM_MODEL: str = "llama-3.3-70b-versatile"
 
+    # Gmail SMTP settings for sending real emails
+    SMTP_USER: str = ""          # e.g. yourname@gmail.com
+    SMTP_APP_PASSWORD: str = ""  # Gmail App Password (not your regular password)
+
     model_config = {
         "env_file": ".env",
         "env_file_encoding": "utf-8",
