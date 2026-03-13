@@ -386,6 +386,16 @@ async def trigger_swarm(
                 action_taken=log_msg,
             )
 
+        # Persist a Ticket with the LLM-generated classification
+        await crud.create_ticket(
+            db=db,
+            event_id=event_id,
+            issue_text=request.command,
+            problem_category=result.get("problem_category", "normal"),
+            urgency_score=result.get("urgency_score", 0),
+            status="Open",
+        )
+
         # Persist to agent-specific table
         await crud.create_swarm_interaction_log(
             db=db, event_id=event_id, command=request.command,
@@ -868,6 +878,16 @@ async def run_emergency_agent(
         for log_msg in log_messages:
             agent_name = log_msg.split("]")[0].strip("[") if log_msg.startswith("[") else "Swarm"
             await crud.create_swarm_log(db=db, event_id=event_id, agent_name=agent_name, action_taken=log_msg)
+
+        # Persist an urgent Ticket for the priority queue
+        await crud.create_ticket(
+            db=db,
+            event_id=event_id,
+            issue_text=request.problem_description,
+            problem_category="urgent",
+            urgency_score=10,
+            status="Open",
+        )
 
         # Persist to agent-specific table
         await crud.create_emergency_log(

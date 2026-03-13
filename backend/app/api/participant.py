@@ -251,7 +251,7 @@ async def report_issue(
             issue_text=request.issue_text,
             problem_category=result.get("problem_category", "normal"),
             urgency_score=result.get("urgency_score", 1),
-            status="Resolved" if result.get("next_agent") == "end" else "Pending",
+            status="Resolved" if result.get("next_agent") == "end" else "Open",
         )
 
         if result.get("schedule_changed_flag"):

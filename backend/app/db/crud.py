@@ -126,8 +126,8 @@ async def create_ticket(
     event_id: int,
     issue_text: str,
     problem_category: str = "normal",
-    urgency_score: int = 1,
-    status: str = "Pending",
+    urgency_score: int = 0,
+    status: str = "Open",
 ) -> Ticket:
     """Create a new support ticket scoped to the given event."""
     ticket = Ticket(
@@ -145,12 +145,15 @@ async def create_ticket(
 
 async def get_priority_queue(db: AsyncSession, event_id: int) -> Sequence[Ticket]:
     """
-    Fetch all tickets for the event, strictly ordered by
+    Fetch all **open** tickets for the event, strictly ordered by
     urgency_score DESC (highest urgency first).
+
+    Only tickets with status='Open' are returned so resolved
+    tickets don't pollute the priority queue.
     """
     result = await db.execute(
         select(Ticket)
-        .where(Ticket.event_id == event_id)
+        .where(Ticket.event_id == event_id, Ticket.status == "Open")
         .order_by(Ticket.urgency_score.desc())
     )
     return result.scalars().all()
@@ -159,7 +162,7 @@ async def get_priority_queue(db: AsyncSession, event_id: int) -> Sequence[Ticket
 async def update_ticket_status(
     db: AsyncSession, ticket_id: int, status: str
 ) -> Ticket | None:
-    """Update the status of a ticket (e.g., Pending -> Resolved)."""
+    """Update the status of a ticket (e.g., Open -> Resolved)."""
     result = await db.execute(select(Ticket).where(Ticket.ticket_id == ticket_id))
     ticket = result.scalar_one_or_none()
     if ticket is None:

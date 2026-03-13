@@ -74,8 +74,9 @@ class Ticket(Base):
     event_id = Column(Integer, ForeignKey("events.event_id", ondelete="CASCADE"), nullable=False)
     issue_text = Column(String(1000), nullable=False)
     problem_category = Column(String(100), nullable=True, default="normal")
-    urgency_score = Column(Integer, nullable=False, default=1)
-    status = Column(String(50), nullable=False, default="Pending")
+    urgency_score = Column(Integer, nullable=False, default=0)
+    status = Column(String(50), nullable=False, default="Open")
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
     event = relationship("Event", back_populates="tickets")
 
