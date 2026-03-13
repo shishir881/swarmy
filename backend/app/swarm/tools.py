@@ -90,37 +90,6 @@ def send_emergency_sms(
     }
 
 
-def predict_posting_times(
-    event_name: str,
-    target_audience: str = "general",
-) -> dict[str, Any]:
-    """
-    Mock social-media posting-time predictor.
-
-    Simulates an analytics engine that recommends optimal posting
-    windows for maximum engagement.
-
-    Args:
-        event_name: Name of the event for context.
-        target_audience: Audience segment to optimize for.
-
-    Returns:
-        A dict with recommended posting windows.
-    """
-    # Simulated optimal time slots
-    recommended_slots = [
-        {"day": "Monday", "time": "09:00 AM", "platform": "LinkedIn", "expected_reach": random.randint(500, 5000)},
-        {"day": "Wednesday", "time": "12:30 PM", "platform": "Twitter/X", "expected_reach": random.randint(1000, 8000)},
-        {"day": "Friday", "time": "06:00 PM", "platform": "Instagram", "expected_reach": random.randint(2000, 10000)},
-        {"day": "Saturday", "time": "10:00 AM", "platform": "Facebook", "expected_reach": random.randint(800, 6000)},
-    ]
-
-    return {
-        "event_name": event_name,
-        "target_audience": target_audience,
-        "recommended_posting_slots": recommended_slots,
-        "analysis_note": f"[MOCK] Optimal posting times computed for '{event_name}' targeting '{target_audience}' audience.",
-    }
 
 
 # ---------------------------------------------------------------------------
