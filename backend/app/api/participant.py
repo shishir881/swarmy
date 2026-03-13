@@ -213,6 +213,7 @@ async def report_issue(
             "urgency_score": 0,
             "schedule_changed_flag": False,
             "emergency_handled_flag": False,
+            "emergency_alert_message": "",
             "master_schedule": event.master_schedule or {},
             "budget_estimate_report": event.budget_report or {},
         }

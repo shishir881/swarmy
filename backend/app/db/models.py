@@ -9,6 +9,7 @@ event_id for multi-tenant isolation.
 from datetime import datetime, timezone
 
 from sqlalchemy import (
+    Boolean,
     Column,
     DateTime,
     Float,
@@ -44,7 +45,14 @@ class Event(Base):
     unresolved_queries = relationship("UnresolvedQuery", back_populates="event", cascade="all, delete-orphan")
     swarm_logs = relationship("SwarmLog", back_populates="event", cascade="all, delete-orphan")
     event_code = relationship("EventCode", back_populates="event", uselist=False, cascade="all, delete-orphan")
-    conversation_logs = relationship("ConversationLog", back_populates="event", cascade="all, delete-orphan")
+
+    # Agent-specific log relationships
+    swarm_interaction_logs = relationship("SwarmInteractionLog", back_populates="event", cascade="all, delete-orphan")
+    marketing_logs = relationship("MarketingLog", back_populates="event", cascade="all, delete-orphan")
+    email_logs = relationship("EmailLog", back_populates="event", cascade="all, delete-orphan")
+    scheduler_logs = relationship("SchedulerLog", back_populates="event", cascade="all, delete-orphan")
+    emergency_logs = relationship("EmergencyLog", back_populates="event", cascade="all, delete-orphan")
+    budget_logs = relationship("BudgetLog", back_populates="event", cascade="all, delete-orphan")
 
 
 class Participant(Base):
@@ -107,20 +115,101 @@ class EventCode(Base):
     event = relationship("Event", back_populates="event_code")
 
 
-class ConversationLog(Base):
-    """
-    Stores every agent interaction: the user's input, the agent's full response,
-    and any structured data (CSV contacts, budget reports, schedules, etc.).
-    Scoped by event_id for multi-tenant isolation.
-    """
-    __tablename__ = "conversation_logs"
+# ---------------------------------------------------------------------------
+# Agent-Specific Interaction Logs
+# ---------------------------------------------------------------------------
 
-    log_id = Column(Integer, primary_key=True, autoincrement=True)
+class SwarmInteractionLog(Base):
+    """Logs for the general-purpose Problem Solver (trigger_swarm)."""
+    __tablename__ = "swarm_interaction_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
     event_id = Column(Integer, ForeignKey("events.event_id", ondelete="CASCADE"), nullable=False)
-    agent_name = Column(String(100), nullable=False)
-    user_input = Column(Text, nullable=False)
-    agent_response = Column(Text, nullable=False)
-    structured_data = Column(JSON, nullable=True, default=None)
+    command = Column(Text, nullable=False)
+    problem_category = Column(String(100), nullable=True, default="")
+    urgency_score = Column(Integer, nullable=True, default=0)
+    schedule_changed = Column(Boolean, nullable=False, default=False)
+    emergency_handled = Column(Boolean, nullable=False, default=False)
+    master_schedule = Column(JSON, nullable=True, default=dict)
+    budget_report = Column(JSON, nullable=True, default=dict)
+    agent_response = Column(Text, nullable=True, default="")
     created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
 
-    event = relationship("Event", back_populates="conversation_logs")
+    event = relationship("Event", back_populates="swarm_interaction_logs")
+
+
+class MarketingLog(Base):
+    """Logs for the Marketing Agent (run_marketing)."""
+    __tablename__ = "marketing_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_id = Column(Integer, ForeignKey("events.event_id", ondelete="CASCADE"), nullable=False)
+    prompt = Column(Text, nullable=False)
+    generated_content = Column(Text, nullable=True, default="")
+    marketing_post = Column(Text, nullable=True, default="")
+    marketing_platform = Column(String(100), nullable=True, default="")
+    marketing_sentiment = Column(String(100), nullable=True, default="")
+    marketing_day = Column(Integer, nullable=True, default=0)
+    hourly_engagement = Column(JSON, nullable=True, default=list)
+    agent_response = Column(Text, nullable=True, default="")
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    event = relationship("Event", back_populates="marketing_logs")
+
+
+class EmailLog(Base):
+    """Logs for the Email Agent (run_email)."""
+    __tablename__ = "email_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_id = Column(Integer, ForeignKey("events.event_id", ondelete="CASCADE"), nullable=False)
+    sample_email = Column(Text, nullable=False)
+    csv_contacts = Column(JSON, nullable=True, default=list)
+    recipients_count = Column(Integer, nullable=False, default=0)
+    agent_response = Column(Text, nullable=True, default="")
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    event = relationship("Event", back_populates="email_logs")
+
+
+class SchedulerLog(Base):
+    """Logs for the Scheduler Agent (run_scheduler)."""
+    __tablename__ = "scheduler_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_id = Column(Integer, ForeignKey("events.event_id", ondelete="CASCADE"), nullable=False)
+    prompt = Column(Text, nullable=False)
+    master_schedule = Column(JSON, nullable=True, default=dict)
+    time_constraints = Column(JSON, nullable=True, default=dict)
+    agent_response = Column(Text, nullable=True, default="")
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    event = relationship("Event", back_populates="scheduler_logs")
+
+
+class EmergencyLog(Base):
+    """Logs for the Emergency Agent (run_emergency)."""
+    __tablename__ = "emergency_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_id = Column(Integer, ForeignKey("events.event_id", ondelete="CASCADE"), nullable=False)
+    problem_description = Column(Text, nullable=False)
+    emergency_handled = Column(Boolean, nullable=False, default=False)
+    agent_response = Column(Text, nullable=True, default="")
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    event = relationship("Event", back_populates="emergency_logs")
+
+
+class BudgetLog(Base):
+    """Logs for the Budget Agent (run_budget)."""
+    __tablename__ = "budget_logs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    event_id = Column(Integer, ForeignKey("events.event_id", ondelete="CASCADE"), nullable=False)
+    request_description = Column(Text, nullable=False)
+    budget_report = Column(JSON, nullable=True, default=dict)
+    agent_response = Column(Text, nullable=True, default="")
+    created_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+
+    event = relationship("Event", back_populates="budget_logs")

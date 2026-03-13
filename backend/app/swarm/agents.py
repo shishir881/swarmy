@@ -19,7 +19,7 @@ from langchain_groq import ChatGroq
 
 from app.config import settings
 from app.swarm.state import EventState
-from app.swarm.tools import predict_best_posting_times, send_bulk_email, send_emergency_sms
+from app.swarm.tools import predict_best_posting_times, send_bulk_email
 
 
 def _parse_json(text: str) -> Any:
@@ -42,6 +42,43 @@ def _get_llm() -> ChatGroq:
         temperature=0.3,
         max_tokens=2048,
     )
+
+
+def _extract_emergency_alert(text: str) -> str:
+    """
+    Normalize LLM output into a single dashboard alert line.
+
+    Rules enforced:
+    - Must begin with the red alert emoji.
+    - Must be <= 100 characters.
+    - Must be single-line, no markdown wrappers.
+    """
+    cleaned = text.strip()
+    cleaned = re.sub(r"^```(?:text)?\s*", "", cleaned)
+    cleaned = re.sub(r"\s*```$", "", cleaned.strip())
+
+    first_line = ""
+    for line in cleaned.splitlines():
+        candidate = line.strip()
+        if candidate:
+            first_line = candidate
+            break
+
+    if not first_line:
+        first_line = "Emergency reported. Organizer action required."
+
+    first_line = re.sub(r"^(?:ALERT\s*MESSAGE|ALERT)\s*:\s*", "", first_line, flags=re.IGNORECASE)
+    first_line = first_line.strip().strip('"').strip("'")
+
+    if first_line.startswith("🚨"):
+        alert = first_line
+    else:
+        alert = f"🚨 {first_line}"
+
+    if len(alert) > 100:
+        alert = alert[:100].rstrip()
+
+    return alert
 
 
 # ---------------------------------------------------------------------------
@@ -458,27 +495,25 @@ Output ONLY the JSON object — no preamble, no explanation, no markdown fences.
 
 async def emergency_info_agent(state: EventState) -> dict[str, Any]:
     """
-    Handle urgent/crisis situations by dispatching SMS and email alerts
-    to the event's officials and key personnel.
+    Handle urgent/crisis situations by generating a high-visibility
+    dashboard alert for organizers.
     """
     llm = _get_llm()
 
-    system_prompt = f"""You are the Emergency Info Agent for an event management system.
+    system_prompt = f"""You are the Emergency UI Dispatcher for an event management dashboard.
 
 EVENT CONTEXT:
 {state['event_context']}
 
 URGENCY SCORE: {state.get('urgency_score', 0)}/10
 
-Your task is to:
-1. Assess the emergency situation
-2. Draft a CLEAR and CONCISE emergency alert message
-3. Identify who needs to be notified (security, medical, management)
+Your ONLY job is to draft one short RED ALERT message for the Organizer Dashboard.
 
-Respond with:
-ALERT MESSAGE: <the alert text>
-NOTIFY: <comma-separated list of roles to notify>
-INSTRUCTIONS: <immediate action steps>
+STRICT RULES:
+- Output exactly one plain-text line (no JSON, no markdown, no labels).
+- The line MUST start with "🚨".
+- The line MUST be under 100 characters.
+- No greetings, no filler, no conversational text.
 """
 
     user_messages = [m for m in state["messages"] if isinstance(m, HumanMessage)]
@@ -486,31 +521,15 @@ INSTRUCTIONS: <immediate action steps>
 
     response = await llm.ainvoke([
         SystemMessage(content=system_prompt),
-        HumanMessage(content=f"Handle this emergency: {emergency}"),
+        HumanMessage(content=f"Create a dashboard red alert for: {emergency}"),
     ])
 
-    # Mock dispatch emergency alerts
-    sms_result = send_emergency_sms(
-        event_id=state["event_id"],
-        recipients=["+1234567890", "+0987654321"],  # Mock official contacts
-        message=response.content,
-    )
-
-    email_result = send_bulk_email(
-        event_id=state["event_id"],
-        recipients=["security@event.com", "medical@event.com"],
-        subject="🚨 EMERGENCY ALERT",
-        body=response.content,
-    )
-
-    log_msg = (
-        f"[Emergency_Info_Agent] Crisis handled. "
-        f"SMS: {sms_result['message']} | Email: {email_result['message']}\n"
-        f"Alert details:\n{response.content}"
-    )
+    alert_message = _extract_emergency_alert(response.content)
+    log_msg = f"[Emergency_Info_Agent] UI alert generated: {alert_message}"
 
     return {
         "emergency_handled_flag": True,
+        "emergency_alert_message": alert_message,
         "messages": [AIMessage(content=log_msg, name="Emergency_Info_Agent")],
     }
 

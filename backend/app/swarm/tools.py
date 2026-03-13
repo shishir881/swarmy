@@ -6,6 +6,7 @@ return structured results for agent consumption.
 """
 
 import json
+import random
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -87,7 +88,6 @@ def send_emergency_sms(
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "message": f"[MOCK] Emergency SMS dispatched to {len(recipients)} officials for event {event_id}.",
     }
-
 
 # ---------------------------------------------------------------------------
 # ML-Powered Posting Time Prediction (returns both text & hourly data)
