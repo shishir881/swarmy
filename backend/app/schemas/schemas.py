@@ -132,7 +132,7 @@ class TicketResponse(BaseModel):
     event_id: int
     issue_text: str
     problem_category: str
-    urgency_score: int = Field(ge=1, le=10)
+    urgency_score: int = Field(ge=0, le=10)
     status: str
 
     model_config = {"from_attributes": True}

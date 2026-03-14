@@ -86,11 +86,13 @@ def send_bulk_email(
 
     sent_count = 0
     failed: list[str] = []
+    failed_errors: list[str] = []
 
     try:
-        with smtplib.SMTP("smtp.gmail.com", 587) as server:
+        with smtplib.SMTP("smtp.gmail.com", 587, timeout=30) as server:
             server.starttls()
             server.login(smtp_user, smtp_password)
+            print(f"[Email Tool] ✅ SMTP login successful as {smtp_user}")
 
             for recipient in recipients:
                 try:
@@ -110,31 +112,36 @@ def send_bulk_email(
                     sent_count += 1
                     print(f"[Email Tool] ✅ Sent to {recipient}")
                 except Exception as e:
+                    error_str = str(e)
                     failed.append(recipient)
+                    failed_errors.append(f"{recipient}: {error_str}")
                     print(f"[Email Tool] ❌ Failed to send to {recipient}: {e}")
 
-    except smtplib.SMTPAuthenticationError:
-        print("[Email Tool] ❌ Gmail authentication failed. Check SMTP_USER and SMTP_APP_PASSWORD.")
+    except smtplib.SMTPAuthenticationError as e:
+        error_detail = str(e)
+        print(f"[Email Tool] ❌ Gmail authentication failed: {error_detail}")
         return {
             "status": "auth_error",
             "event_id": event_id,
             "recipients_count": 0,
             "subject": subject,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "message": "Gmail authentication failed. Verify your App Password.",
+            "message": f"Gmail authentication failed: {error_detail}. Verify your App Password.",
         }
     except Exception as e:
-        print(f"[Email Tool] ❌ SMTP connection error: {e}")
+        error_detail = str(e)
+        print(f"[Email Tool] ❌ SMTP connection error: {error_detail}")
         return {
             "status": "connection_error",
             "event_id": event_id,
             "recipients_count": sent_count,
             "subject": subject,
             "timestamp": datetime.now(timezone.utc).isoformat(),
-            "message": f"SMTP error: {str(e)}. {sent_count} sent before failure.",
+            "message": f"SMTP error: {error_detail}. {sent_count} sent before failure.",
         }
 
     status = "sent" if not failed else "partial"
+    fail_detail = f" Failures: {'; '.join(failed_errors)}" if failed_errors else ""
     return {
         "status": status,
         "event_id": event_id,
@@ -142,7 +149,7 @@ def send_bulk_email(
         "failed_recipients": failed,
         "subject": subject,
         "timestamp": datetime.now(timezone.utc).isoformat(),
-        "message": f"Email sent to {sent_count}/{len(recipients)} recipients for event {event_id}.",
+        "message": f"Email sent to {sent_count}/{len(recipients)} recipients for event {event_id}.{fail_detail}",
     }
 
 

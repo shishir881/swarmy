@@ -26,6 +26,26 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
+# ---------------------------------------------------------------------------
+# Suppress noisy polling endpoints from uvicorn access logs
+# ---------------------------------------------------------------------------
+
+class _PollingSilencer(logging.Filter):
+    """Filter out frequent polling GET requests that clutter the terminal."""
+
+    _NOISY_SUFFIXES = ("/logs", "/priority_queue", "/unresolved_queries", "/resolved_tickets")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        # uvicorn access log format: '<ip> - "<METHOD> <path> ..." <status>'
+        if "GET" in msg and any(suffix in msg for suffix in self._NOISY_SUFFIXES):
+            return False  # suppress
+        return True
+
+
+logging.getLogger("uvicorn.access").addFilter(_PollingSilencer())
+
+
 async def _apply_schema_patches() -> None:
     """
     Apply lightweight schema patches for existing deployments.

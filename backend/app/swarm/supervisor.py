@@ -11,6 +11,9 @@ from typing import Any
 from langchain_core.messages import AIMessage
 
 from app.swarm.state import EventState
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Agent name constants (must match node names in the graph)
 PROBLEM_SOLVER = "problem_solver"
@@ -65,12 +68,14 @@ async def supervisor_node(state: EventState) -> dict[str, Any]:
         )
         if not already_ran:
             log_msg = f"[Supervisor] Direct route requested → {direct_route}."
+            logger.info(log_msg)
             return {
                 "next_agent": direct_route,
                 "messages": [AIMessage(content=log_msg, name="Supervisor")],
             }
         else:
             log_msg = f"[Supervisor] Direct route '{direct_route}' completed → END."
+            logger.info(log_msg)
             return {
                 "next_agent": END,
                 "messages": [AIMessage(content=log_msg, name="Supervisor")],
@@ -148,6 +153,8 @@ async def supervisor_node(state: EventState) -> dict[str, Any]:
         routing_reason = f"Unknown category '{category}'. Terminating."
 
     log_msg = f"[Supervisor] Decision: {routing_reason} → Next: {next_agent}"
+    # Log decision to standard logger as well for observability
+    logger.info(log_msg)
 
     return {
         "next_agent": next_agent,

@@ -293,9 +293,9 @@ async def get_resolved_queries(
 
 async def create_swarm_log(
     db: AsyncSession, event_id: int, agent_name: str, action_taken: str
-) -> SwarmInteractionLog:
+) -> SwarmLog:
     """Log an action taken by a Swarm agent."""
-    log = SwarmInteractionLog(
+    log = SwarmLog(
         event_id=event_id,
         agent_name=agent_name,
         action_taken=action_taken,
@@ -306,12 +306,12 @@ async def create_swarm_log(
     return log
 
 
-async def get_event_swarm_logs(db: AsyncSession, event_id: int) -> Sequence[SwarmInteractionLog]:
+async def get_event_swarm_logs(db: AsyncSession, event_id: int) -> Sequence[SwarmLog]:
     """Fetch all swarm logs for a specific event."""
     result = await db.execute(
-        select(SwarmInteractionLog)
-        .where(SwarmInteractionLog.event_id == event_id)
-        .order_by(SwarmInteractionLog.timestamp.asc())
+        select(SwarmLog)
+        .where(SwarmLog.event_id == event_id)
+        .order_by(SwarmLog.timestamp.asc())
     )
     return result.scalars().all()
 
@@ -576,3 +576,4 @@ async def get_budget_logs(
         .order_by(desc(BudgetLog.created_at))
     )
     return result.scalars().all()
+

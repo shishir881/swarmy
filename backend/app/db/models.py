@@ -71,6 +71,7 @@ class Event(Base):
     budget_logs = relationship("BudgetLog", back_populates="event", cascade="all, delete-orphan")
 
 
+
 class Participant(Base):
     __tablename__ = "participants"
 

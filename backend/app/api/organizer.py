@@ -751,7 +751,7 @@ async def get_event_logs(
         logs = await crud.get_event_swarm_logs(db, event_id)
         return [
             SwarmLogResponse(
-                log_id=log.id,
+                log_id=log.log_id,
                 event_id=log.event_id,
                 timestamp=log.timestamp,
                 agent_name=log.agent_name,

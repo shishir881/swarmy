@@ -234,8 +234,8 @@ MASTER SCHEDULE: {schedule_str}"""
 
         system_prompt = f"""You are a helpful Q&A assistant for participants of an event.
 Answer the participant's question using ONLY the event information provided below.
-If the information is not available in the context, say so honestly.
-Be concise, friendly, and direct. Do NOT make up information.
+If the information is missing or not available in the context, your entire response MUST be exactly the word "UNRESOLVED" with no other text.
+Be concise, friendly, and direct. Do NOT make up information or hallucinate.
 
 {pg_context}{rag_section}"""
 
@@ -245,15 +245,22 @@ Be concise, friendly, and direct. Do NOT make up information.
         ])
 
         answer_text = response.content.strip()
+        answer_upper = answer_text.upper()
+        answer_lower = answer_text.lower()
 
         # ── 4. Determine confidence ─────────────────────────────────────
-        # If the LLM says it doesn't know, treat as low confidence
         no_answer_phrases = [
             "not available", "don't have", "no information",
             "cannot find", "not provided", "not mentioned",
-            "i'm not sure", "i don't know",
+            "i'm not sure", "i don't know", "i cannot answer",
+            "i'm sorry"
         ]
-        is_uncertain = any(phrase in answer_text.lower() for phrase in no_answer_phrases)
+        
+        is_uncertain = (
+            "UNRESOLVED" in answer_upper or 
+            any(phrase in answer_lower for phrase in no_answer_phrases) or
+            len(answer_text) < 5
+        )
 
         if is_uncertain:
             # Save as unresolved for the organizer to answer
@@ -264,8 +271,8 @@ Be concise, friendly, and direct. Do NOT make up information.
             )
             return ChatResponse(
                 answer=(
-                    f"{answer_text}\n\nYour question has been forwarded to the "
-                    "event organizers for a detailed response."
+                    "I couldn't find the answer to your question in the event details.\n\n"
+                    "Your question has been forwarded to the event organizers for a detailed response."
                 ),
                 confidence=0.3,
                 source="fallback",
@@ -433,11 +440,11 @@ async def get_resolved_tickets(
         return [
             TicketResponse(
                 ticket_id=t.ticket_id,
+                event_id=t.event_id,
                 issue_text=t.issue_text,
                 problem_category=t.problem_category,
                 urgency_score=t.urgency_score,
                 status=t.status,
-                created_at=t.created_at,
             ) for t in tickets
         ]
     except Exception as e:

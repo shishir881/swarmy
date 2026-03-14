@@ -12,7 +12,9 @@ Supervisor after completing their work.
 
 import json
 import re
+from datetime import datetime
 from typing import Any
+import logging
 
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 from langchain_groq import ChatGroq
@@ -20,6 +22,8 @@ from langchain_groq import ChatGroq
 from app.config import settings
 from app.swarm.state import EventState
 from app.swarm.tools import predict_best_posting_times, send_bulk_email
+
+logger = logging.getLogger(__name__)
 
 
 def _parse_json(text: str) -> Any:
@@ -107,6 +111,7 @@ async def problem_solver_agent(state: EventState) -> dict[str, Any]:
 
     Categories: finance, reschedule, urgent, normal, human_escalation
     """
+    logger.info(f"Entering problem_solver_agent for event_id={state.get('event_id')}")
     llm = _get_llm()
 
     system_prompt = f"""You are the Problem Solver Agent — the Anti-Panic Gatekeeper — for an event management system.
@@ -188,12 +193,16 @@ CLASSIFICATION & SCORING RULES (follow these EXACTLY):
         score = max(1, min(7, score))
 
     log_msg = f"[Problem_Solver] Category: {category}, Urgency: {score}/10. {reasoning}"
+    logger.info(log_msg)
 
-    return {
+    result = {
         "problem_category": category,
         "urgency_score": score,
         "messages": [AIMessage(content=log_msg, name="Problem_Solver_Agent")],
     }
+
+    logger.debug(f"problem_solver_agent result: {result}")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +219,7 @@ async def marketing_agent(state: EventState) -> dict[str, Any]:
     - promotional_post: The drafted social media content
     - ml_features: Platform, sentiment, day_of_week, hashtag_count for ML prediction
     """
+    logger.info(f"Entering marketing_agent for event_id={state.get('event_id')}")
     llm = _get_llm()
 
     system_prompt = f"""You are an Expert Event Marketing Agent with deep knowledge of social media engagement.
@@ -295,7 +305,7 @@ Make the post compelling, relevant to the event context, and optimized for engag
 """
 
         # Return with hourly engagement data for frontend charting
-        return {
+        result = {
             "messages": [AIMessage(content=log_msg, name="Marketing_Agent")],
             "marketing_post": promotional_post,
             "marketing_platform": platform,
@@ -303,6 +313,8 @@ Make the post compelling, relevant to the event context, and optimized for engag
             "marketing_day": day_of_week,
             "hourly_engagement": hourly_engagement_data.get("hours", []),
         }
+        logger.info(f"marketing_agent result keys: {list(result.keys())}")
+        return result
 
     except (json.JSONDecodeError, ValueError, KeyError) as e:
         # Fallback if JSON parsing fails
@@ -315,7 +327,7 @@ Error: {str(e)}
 
 Please try again or check the system prompt configuration.
 """
-        return {
+        result = {
             "messages": [AIMessage(content=log_msg, name="Marketing_Agent")],
             "marketing_post": "",
             "marketing_platform": "twitter",
@@ -323,6 +335,8 @@ Please try again or check the system prompt configuration.
             "marketing_day": 0,
             "hourly_engagement": [{"hour": h, "engagement": "Unknown"} for h in range(24)],
         }
+        logger.warning("marketing_agent returned fallback result due to JSON parsing error")
+        return result
 
 
 # ---------------------------------------------------------------------------
@@ -334,11 +348,15 @@ async def scheduler_agent(state: EventState) -> dict[str, Any]:
     Ingest constraints, read the current master_schedule, resolve time
     clashes without double-booking, and produce a new timeline.
     """
+    logger.info(f"Entering scheduler_agent for event_id={state.get('event_id')}")
     llm = _get_llm()
 
     current_schedule = json.dumps(state.get("master_schedule", {}), indent=2)
 
     system_prompt = f"""You are the Scheduler Agent for an event management system.
+
+TODAY'S DATE: {datetime.now().strftime('%A, %B %d, %Y at %I:%M %p')}
+Use this as the reference for all dates and times you generate.
 
 EVENT CONTEXT:
 {state['event_context']}
@@ -394,13 +412,31 @@ The JSON should have this structure:
     except (json.JSONDecodeError, ValueError):
         new_schedule = {"_scheduler_note": response.content}
 
-    log_msg = f"[Scheduler_Agent] Schedule updated. Conflicts resolved."
+    # Ensure the exposed master_schedule only contains `sessions` and `last_updated`.
+    # Accept whatever the LLM returned but strip any extra keys for downstream consumers.
+    sessions = []
+    last_updated = None
+    if isinstance(new_schedule, dict):
+        sessions = new_schedule.get("sessions") or []
+        last_updated = new_schedule.get("last_updated")
 
-    return {
-        "master_schedule": new_schedule,
+    # Fallbacks if the LLM didn't provide the expected structure
+    if not isinstance(sessions, list):
+        sessions = []
+    if not last_updated:
+        last_updated = datetime.now().isoformat()
+
+    filtered_schedule = {"sessions": sessions, "last_updated": last_updated}
+
+    log_msg = f"[Scheduler_Agent] Schedule updated. Conflicts resolved."
+    logger.info(log_msg)
+    result = {
+        "master_schedule": filtered_schedule,
         "schedule_changed_flag": True,
         "messages": [AIMessage(content=log_msg, name="Scheduler_Agent")],
     }
+    logger.debug(f"scheduler_agent result: {result}")
+    return result
 
 
 
@@ -419,6 +455,7 @@ async def email_agent(state: EventState) -> dict[str, Any]:
         emergency/scheduler agents), fetches joined participants from the
         DB and sends updates only to them.
     """
+    logger.info(f"Entering email_agent for event_id={state.get('event_id')} (csv_contacts={len(state.get('email_csv_data') or [])})")
     llm = _get_llm()
 
     csv_contacts = state.get("email_csv_data") or []
@@ -632,11 +669,13 @@ Output ONLY the JSON object — no preamble, no explanation, no markdown fences.
             f"[Email_Agent] Failed to persist email log: {e}"
         )
 
-    return {
+    result = {
         "email_recipients_count": total_sent,
         "email_category_reports": category_reports,
         "messages": [AIMessage(content=log_msg, name="Email_Agent")],
     }
+    logger.info(f"email_agent sent {total_sent} recipients; status summary keys: {list(result.keys())}")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -651,6 +690,7 @@ async def emergency_info_agent(state: EventState) -> dict[str, Any]:
     a concise UI alert string. The Supervisor routes to Email_Agent
     afterwards if mass notification is needed.
     """
+    logger.info(f"Entering emergency_info_agent for event_id={state.get('event_id')} urgency={state.get('urgency_score')}")
     llm = _get_llm()
 
     system_prompt = f"""You are the Emergency UI Dispatcher for an event management dashboard.
@@ -682,11 +722,13 @@ STRICT RULES — follow without exception:
     alert_message = _extract_emergency_alert(response.content)
     log_msg = f"[Emergency_Info_Agent] UI alert generated: {alert_message}"
 
-    return {
+    result = {
         "emergency_handled_flag": True,
         "emergency_alert_message": alert_message,
         "messages": [AIMessage(content=log_msg, name="Emergency_Info_Agent")],
     }
+    logger.info(f"emergency_info_agent generated alert: {alert_message}")
+    return result
 
 
 # ---------------------------------------------------------------------------
@@ -698,6 +740,7 @@ async def budget_finance_agent(state: EventState) -> dict[str, Any]:
     Read the total_budget_allocated and produce a logical percentage-based
     financial breakdown using LLM reasoning.
     """
+    logger.info(f"Entering budget_finance_agent for event_id={state.get('event_id')}")
     llm = _get_llm()
 
     system_prompt = f"""You are the Budget & Finance Agent for an event management system.
@@ -715,7 +758,7 @@ Your task is to:
 Respond ONLY with valid JSON in this format:
 {{
     "total_budget": <amount>,
-    "currency": "USD",
+    "currency": "INR",
     "breakdown": [
         {{"category": "Venue & Infrastructure", "percentage": 30, "amount": <calculated>}},
         {{"category": "Catering", "percentage": 20, "amount": <calculated>}},
@@ -749,7 +792,10 @@ Adjust categories and percentages based on the specific event type and context.
 
     log_msg = f"[Budget_Finance_Agent] Budget breakdown generated: {json.dumps(budget_report, indent=2)}"
 
-    return {
+    result = {
         "budget_estimate_report": budget_report,
         "messages": [AIMessage(content=log_msg, name="Budget_Finance_Agent")],
     }
+    logger.info("budget_finance_agent completed")
+    logger.debug(f"budget_finance_agent report: {budget_report}")
+    return result

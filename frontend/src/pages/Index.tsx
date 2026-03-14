@@ -375,9 +375,6 @@ const Index = () => {
 
                 {/* Brand row */}
                 <div style={{ padding: "14px 12px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid var(--border)" }}>
-                    <div style={{ width: 22, height: 22, background: "var(--lime10)", border: "1px solid var(--lime35)", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                        <Zap size={12} color="var(--green)" fill="var(--green)" />
-                    </div>
                     <span className="sidebar-text" style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", letterSpacing: "0.02em" }}>mela.ai</span>
                     <button onClick={() => setCollapsed(c => !c)}
                         style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--text3)", padding: 2, flexShrink: 0 }}>
