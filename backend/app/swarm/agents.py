@@ -192,7 +192,10 @@ CLASSIFICATION & SCORING RULES (follow these EXACTLY):
     elif category in ("normal", "human_escalation"):
         score = max(1, min(7, score))
 
-    log_msg = f"[Problem_Solver] Category: {category}, Urgency: {score}/10. {reasoning}"
+    if category == "urgent":
+        log_msg = f"Emergency Info: {reasoning}"
+    else:
+        log_msg = f"Log Info: {reasoning}"
     logger.info(log_msg)
 
     result = {
