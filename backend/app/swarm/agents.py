@@ -673,59 +673,89 @@ STRICT RULES — follow without exception:
 
 async def budget_finance_agent(state: EventState) -> dict[str, Any]:
     """
-    Read the total_budget_allocated and produce a logical percentage-based
-    financial breakdown using LLM reasoning.
+    Smart CFO & Financial Advisor agent.
+
+    Reads the initial total budget from event_context and the user's requested
+    expense breakdown from the latest HumanMessage. Returns a structured JSON
+    report with a category breakdown (percentages sum to 100), over/under-budget
+    status, a strict warning if over budget, and 2-3 actionable suggestions.
     """
     llm = _get_llm()
 
-    system_prompt = f"""You are the Budget & Finance Agent for an event management system.
-
-EVENT CONTEXT:
-{state['event_context']}
-
-CURRENT BUDGET REPORT: {json.dumps(state.get('budget_estimate_report', {}), indent=2)}
-
-Your task is to:
-1. Analyze the event context to understand budget requirements
-2. Produce a logical percentage-based financial breakdown
-3. Ensure all percentages sum to 100%
-
-Respond ONLY with valid JSON in this format:
-{{
-    "total_budget": <amount>,
-    "currency": "USD",
-    "breakdown": [
-        {{"category": "Venue & Infrastructure", "percentage": 30, "amount": <calculated>}},
-        {{"category": "Catering", "percentage": 20, "amount": <calculated>}},
-        {{"category": "Marketing & Promotion", "percentage": 15, "amount": <calculated>}},
-        {{"category": "Speaker Fees & Travel", "percentage": 15, "amount": <calculated>}},
-        {{"category": "Technology & AV", "percentage": 10, "amount": <calculated>}},
-        {{"category": "Contingency", "percentage": 10, "amount": <calculated>}}
-    ],
-    "recommendations": ["list of budget optimization suggestions"]
-}}
-
-Adjust categories and percentages based on the specific event type and context.
-"""
-
+    # ── Extract latest user request ──────────────────────────────────────────
     user_messages = [m for m in state["messages"] if isinstance(m, HumanMessage)]
     request = user_messages[-1].content if user_messages else "Provide a budget breakdown"
 
+    # ── Build system prompt ──────────────────────────────────────────────────
+    system_prompt = f"""You are the Smart CFO & Financial Advisor for an event management system.
+
+EVENT CONTEXT (the initial total budget is on the line labeled "Budget: $..."):
+{state['event_context']}
+
+YOUR TASK
+---------
+The organizer has described a set of requested expenses. You must:
+1. Extract EVERY expense item and its amount from the organizer's request.
+2. Sum them to compute total_requested_expense.
+3. Read initial_total_budget from the event context above.
+4. Build a breakdown array — one entry per category. For each entry compute:
+       percentage = round((amount / total_requested_expense) * 100, 2)
+   Percentages MUST sum to exactly 100.
+5. Set budget_status to "Over Budget" if total_requested_expense > initial_total_budget,
+   otherwise "Within Budget".
+6. If "Over Budget", write a strict warning_message stating the exact overage amount
+   (e.g. "You are $X,XXX over budget. Immediate cost cuts required."). Otherwise "".
+7. Write 2-3 concrete, actionable smart_suggestions suited to the budget situation.
+
+OUTPUT FORMAT
+-------------
+Respond ONLY with a strictly valid JSON object — no markdown fences, no extra text:
+{{
+    "initial_total_budget": <number>,
+    "total_requested_expense": <number>,
+    "budget_status": "Over Budget" | "Within Budget",
+    "breakdown": [
+        {{"category": "<string>", "amount": <number>, "percentage": <number>}}
+    ],
+    "warning_message": "<string or empty string>",
+    "smart_suggestions": ["<string>", "<string>"]
+}}
+"""
+
     response = await llm.ainvoke([
         SystemMessage(content=system_prompt),
-        HumanMessage(content=f"Create budget analysis for: {request}"),
+        HumanMessage(content=f"Analyse and report on this budget request: {request}"),
     ])
 
-    # Parse the budget report
+    # ── Parse LLM JSON output ────────────────────────────────────────────────
     try:
         budget_report = _parse_json(response.content)
     except (json.JSONDecodeError, ValueError):
         budget_report = {
-            "error": "Could not parse LLM budget response",
+            "initial_total_budget": 0,
+            "total_requested_expense": 0,
+            "budget_status": "Unknown",
+            "breakdown": [],
+            "warning_message": "",
+            "smart_suggestions": [],
+            "parse_error": "Could not parse LLM response.",
             "raw_response": response.content,
         }
 
-    log_msg = f"[Budget_Finance_Agent] Budget breakdown generated: {json.dumps(budget_report, indent=2)}"
+    # ── Build human-readable log message ─────────────────────────────────────
+    status = budget_report.get("budget_status", "Unknown")
+    status_icon = "🔴" if status == "Over Budget" else "🟢"
+    initial = budget_report.get("initial_total_budget", 0)
+    requested = budget_report.get("total_requested_expense", 0)
+    warning = budget_report.get("warning_message", "")
+
+    log_msg = (
+        f"[Budget_Finance_Agent] {status_icon} {status} | "
+        f"Initial Budget: ${initial:,.2f} | "
+        f"Requested: ${requested:,.2f}"
+    )
+    if warning:
+        log_msg += f" | {warning}"
 
     return {
         "budget_estimate_report": budget_report,
