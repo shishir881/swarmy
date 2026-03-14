@@ -5,7 +5,7 @@ import { useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "../contexts/AuthContext";
 import {
     Sparkles, Mail, CalendarClock, ChevronLeft, Plus, Send,
-    ArrowLeft, Loader2, CheckCircle2, AlertCircle, Paperclip, X, Clock, Menu,
+    ArrowLeft, Loader2, CheckCircle2, AlertCircle, Paperclip, X, Clock,
     CircleDollarSign, MessageSquarePlus, Copy, Pencil, LogOut, Home
 } from "lucide-react";
 import { playEmergencySound, playProblemSound, playResolvedSound } from "../utils/sounds";
@@ -279,7 +279,6 @@ const Index = () => {
             // Fetch queries independently so a problem-fetch failure doesn't block queries
             try {
                 const qRes = await axios.get(`${API}/organizer/events/${selectedEvent.id}/unresolved_queries`);
-                console.log("[Sidebar] Fetched queries:", qRes.data?.length, "for event", selectedEvent.id);
                 setQueries(Array.isArray(qRes.data) ? qRes.data : []);
             } catch (err) {
                 console.error("Failed to fetch queries", err);
@@ -375,7 +374,7 @@ const Index = () => {
 
                 {/* Brand row */}
                 <div style={{ padding: "14px 12px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid var(--border)" }}>
-                    <span className="sidebar-text" style={{ fontSize: 13, fontWeight: 700, color: "var(--text)", letterSpacing: "0.02em" }}>mela.ai</span>
+                    <span className="sidebar-text" style={{ fontSize: 13, fontWeight: 700, letterSpacing: "0.02em" }}><span style={{ color: "var(--green)" }}>mela</span><span style={{ color: "var(--text)" }}>.ai</span></span>
                     <button onClick={() => setCollapsed(c => !c)}
                         style={{ marginLeft: "auto", background: "none", border: "none", cursor: "pointer", color: "var(--text3)", padding: 2, flexShrink: 0 }}>
                         <ChevronLeft size={14} style={{ transform: collapsed ? "rotate(180deg)" : "none", transition: "transform 0.2s" }} />
@@ -435,14 +434,6 @@ const Index = () => {
                 {/* Topbar */}
                 {!(events.length === 0 || showCreateForm) && (
                     <div style={{ padding: "0 24px", height: 58, borderBottom: "1px solid var(--border)", display: "flex", alignItems: "center", justifyContent: "space-between", flexShrink: 0, background: "var(--surface)" }}>
-                        {/* Left: title */}
-                        <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
-                            {collapsed && (
-                                <button onClick={() => setCollapsed(false)} style={{ background: "transparent", border: "1px solid var(--border)", padding: 6, color: "var(--text)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", marginRight: 16 }}>
-                                    <Menu size={16} />
-                                </button>
-                            )}
-                        </div>
 
                         {/* Center: event breadcrumb pill & codes */}
                         {selectedEvent && (
@@ -544,7 +535,7 @@ const Index = () => {
                         <div className="depth-panel" style={{ flex: 1, display: "flex", flexDirection: "column", padding: 24 }}>
                             {chatExpanded && chatInput ? (
                                 <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 16, color: "var(--text3)" }}>
-                                    <Zap size={32} style={{ color: "var(--green)" }} className="animate-pulse" />
+                                    {/* bolt icon removed */}
                                     <span style={{ fontSize: 13, letterSpacing: "0.05em", textTransform: "uppercase", fontWeight: 600 }}>Processing Instruction...</span>
                                 </div>
                             ) : (

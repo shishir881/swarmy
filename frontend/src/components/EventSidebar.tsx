@@ -25,7 +25,7 @@ export function EventSidebar() {
             <SidebarContent className="pt-4">
                 {/* Brand */}
                 <div className="px-4 pb-4 flex items-center gap-2">
-                    <span className="text-sm font-semibold tracking-tight text-foreground">mela.ai</span>
+                    <span className="text-sm font-semibold tracking-tight text-foreground"><span style={{ color: 'var(--green)' }}>mela</span><span style={{ color: 'var(--text)' }}>.ai</span></span>
                 </div>
 
                 <SidebarGroup>

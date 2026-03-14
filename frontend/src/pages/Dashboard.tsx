@@ -1,7 +1,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { ArrowRight, LogOut, Home, Zap, Users } from 'lucide-react';
+import { ArrowRight, LogOut, Home, Users, Zap } from 'lucide-react';
 
 const Dashboard: React.FC = () => {
   const { logout, user } = useAuth();
@@ -28,7 +28,7 @@ const Dashboard: React.FC = () => {
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
           <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--lime10)', border: '1px solid var(--lime35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           </div>
-          <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.01em' }}>mela.ai</span>
+          <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.01em' }}><span style={{ color: 'var(--green)' }}>mela</span><span style={{ color: 'var(--text)' }}>.ai</span></span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
           <button onClick={() => navigate('/')} style={{
@@ -49,7 +49,7 @@ const Dashboard: React.FC = () => {
 
       {/* Main Content */}
       <main style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '40px 24px' }}>
-        <h1 style={{ fontSize: 32, fontWeight: 600, marginBottom: 12, color: 'var(--text)' }}>Welcome to mela.ai</h1>
+        <h1 style={{ fontSize: 32, fontWeight: 600, marginBottom: 12, color: 'var(--text)' }}>Welcome to <span style={{ color: 'var(--green)' }}>mela</span><span style={{ color: 'var(--text)' }}>.ai</span></h1>
         <p style={{ fontSize: 14, color: 'var(--text3)', marginBottom: 48, maxWidth: 400, textAlign: 'center' }}>
           Select how you want to interact with the platform. You can host your own event or join an existing one.
         </p>

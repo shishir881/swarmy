@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Zap, ArrowLeft, MessageSquarePlus } from "lucide-react";
+import { Send, ArrowLeft, MessageSquarePlus } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import axios from "axios";
 import { playMessageSound } from "../utils/sounds";
@@ -71,7 +71,7 @@ export function ChatBar({ eventId, isExpanded, setExpanded, onInputChange }: { e
             {/* Topbar logic for fullscreen back button */}
             {isExpanded && (
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-                    <h2 style={{ fontSize: 14, fontWeight: 500, margin: 0, color: "var(--text)" }}>mela.ai Live Execution</h2>
+                    <h2 style={{ fontSize: 14, fontWeight: 500, margin: 0, color: "var(--text)" }}><span style={{ color: "var(--green)" }}>mela</span><span style={{ color: "var(--text)" }}>.ai Live Execution</span></h2>
                     <button onClick={() => setExpanded?.(false)} style={{ background: "none", border: "none", color: "var(--text3)", cursor: "pointer", display: "flex", alignItems: "center", gap: 6, fontSize: 13 }}>
                         <ArrowLeft size={16} /> Back
                     </button>
@@ -120,7 +120,7 @@ export function ChatBar({ eventId, isExpanded, setExpanded, onInputChange }: { e
                                 style={{ display: "flex", justifyContent: "flex-start" }}
                             >
                                 <span style={{ fontSize: 12, padding: "8px 14px", borderRadius: 8, background: "var(--surface2)", color: "var(--text3)", border: "1px solid var(--border)", fontStyle: "italic" }}>
-                                    mela.ai agents executing...
+                                    <span style={{ color: "var(--green)" }}>mela</span><span style={{ color: "var(--text3)" }}>.ai agents executing...</span>
                                 </span>
                             </motion.div>
                         )}
@@ -170,7 +170,7 @@ export function ChatBar({ eventId, isExpanded, setExpanded, onInputChange }: { e
                 style={{ display: "flex", alignItems: isExpanded ? "flex-end" : "center", gap: 8, padding: "12px 14px", position: "relative", zIndex: 10 }}
                 onClick={() => { if (!isExpanded && setExpanded) setExpanded(true); }}
             >
-                <Zap size={14} color="var(--text3)" style={{ flexShrink: 0, marginBottom: isExpanded ? 6 : 0 }} />
+                {/* bolt icon removed */}
                 {isExpanded ? (
                     <textarea
                         value={input}
