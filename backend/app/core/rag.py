@@ -5,6 +5,8 @@ All queries and upserts are scoped by event_id metadata to enforce
 multi-tenant isolation within a single ChromaDB collection.
 """
 
+import json
+
 import chromadb
 from chromadb.config import Settings as ChromaSettings
 
@@ -125,12 +127,18 @@ def add_to_rag(event_id: int, question: str, answer: str) -> str:
 def sync_event_data_to_rag(
     event_id: int,
     event_name: str,
+    event_type: str,
     organizer: str,
     rules: str,
     schedule: dict,
+    status: str = "active",
+    participant_count: int = 0,
+    open_ticket_count: int = 0,
+    pending_query_count: int = 0,
+    resolved_faqs: list[dict[str, str]] | None = None,
 ) -> int:
     """
-    Extract meaningful data (rules & schedule) from PostgreSQL and upsert
+    Extract meaningful event data from PostgreSQL and upsert
     it into ChromaDB as human-readable semantic chunks.
 
     Each chunk is stored with a deterministic ID so re-running this
@@ -147,10 +155,13 @@ def sync_event_data_to_rag(
     ids: list[str] = []
     documents: list[str] = []
     metadatas: list[dict] = []
+    resolved_faqs = resolved_faqs or []
 
     # ── 1. General event info & rules chunk ─────────────────────────────────
     general_doc = (
         f"Event Name: {event_name}\n"
+        f"Event Type: {event_type or 'general'}\n"
+        f"Event Status: {status or 'active'}\n"
         f"Organizer: {organizer}\n"
         f"General Rules and Context:\n{rules or 'No specific rules provided.'}"
     )
@@ -158,7 +169,17 @@ def sync_event_data_to_rag(
     documents.append(general_doc)
     metadatas.append({"event_id": str(event_id), "source": "postgres_general"})
 
-    # ── 2. Master schedule — one chunk per session ───────────────────────────
+    # ── 2. Operational stats from Postgres ──────────────────────────────────
+    stats_doc = (
+        f"Registered Participants: {participant_count}\n"
+        f"Open Support Tickets: {open_ticket_count}\n"
+        f"Pending Unresolved Queries: {pending_query_count}"
+    )
+    ids.append(f"event_{event_id}_operational_stats")
+    documents.append(stats_doc)
+    metadatas.append({"event_id": str(event_id), "source": "postgres_stats"})
+
+    # ── 3. Master schedule — one chunk per session ──────────────────────────
     if schedule and "sessions" in schedule:
         for index, session in enumerate(schedule["sessions"]):
             title   = session.get("title",    "Unknown Session")
@@ -182,6 +203,27 @@ def sync_event_data_to_rag(
                 "source": "postgres_schedule",
                 "session_title": title,
             })
+    elif schedule:
+        # Fallback for non-session schedule shapes so retrieval still works.
+        schedule_doc = (
+            "Master Schedule Snapshot:\n"
+            f"{json.dumps(schedule, indent=2, ensure_ascii=True)}"
+        )
+        ids.append(f"event_{event_id}_schedule_snapshot")
+        documents.append(schedule_doc)
+        metadatas.append({"event_id": str(event_id), "source": "postgres_schedule_snapshot"})
+
+    # ── 4. Resolved organizer FAQs (active learning from Postgres) ──────────
+    for index, item in enumerate(resolved_faqs):
+        question = (item.get("question") or "").strip()
+        answer = (item.get("answer") or "").strip()
+        if not question or not answer:
+            continue
+
+        faq_doc = f"Question: {question}\nAnswer: {answer}"
+        ids.append(f"event_{event_id}_resolved_faq_{index}")
+        documents.append(faq_doc)
+        metadatas.append({"event_id": str(event_id), "source": "postgres_resolved_faq"})
 
     if ids:
         collection.upsert(ids=ids, documents=documents, metadatas=metadatas)

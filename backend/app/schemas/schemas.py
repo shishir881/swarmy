@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 class EventBase(BaseModel):
     """Base schema for event data."""
     event_name: str = Field(..., max_length=255, description="Name of the event")
+    event_type: str = Field(default="general", max_length=100, description="Type of event, e.g. hackathon, celebration, workshop")
     organizer_name: str = Field(..., max_length=255, description="Name of the organizer")
     organizer_email: Optional[str] = Field(default="", max_length=255, description="Organizer's email — used as Reply-To on participant emails")
     event_rules_and_context: str = Field(default="", description="Rules and context injected into agent prompts")
@@ -163,6 +164,7 @@ class TimelineResponse(BaseModel):
     """Response schema for the event timeline endpoint."""
     event_id: int
     event_name: str
+    event_type: str
     master_schedule: dict[str, Any]
 
 
@@ -288,6 +290,7 @@ class JoinEventResponse(BaseModel):
     """
     event_id: int
     event_name: str
+    event_type: str
     organizer_name: str
     master_schedule: dict[str, Any]
     message: str
@@ -313,6 +316,7 @@ class EventInfoResponse(BaseModel):
     """Full event info returned to participants."""
     event_id: int
     event_name: str
+    event_type: str
     organizer_name: str
     event_rules_and_context: str
     total_budget_allocated: float
@@ -329,6 +333,7 @@ class EventListItem(BaseModel):
     """Summary item for the organizer's event list / history."""
     event_id: int
     event_name: str
+    event_type: str
     organizer_name: str
     status: str
     created_at: datetime
@@ -341,6 +346,7 @@ class EventDetailResponse(BaseModel):
     """Full event detail with related data for the organizer dashboard."""
     event_id: int
     event_name: str
+    event_type: str
     organizer_name: str
     event_rules_and_context: str
     total_budget_allocated: float

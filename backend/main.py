@@ -42,6 +42,12 @@ async def _apply_schema_patches() -> None:
                 ADD COLUMN IF NOT EXISTS organizer_email VARCHAR(255) DEFAULT '';
                 """
             ))
+            await conn.execute(text(
+                """
+                ALTER TABLE IF EXISTS events
+                ADD COLUMN IF NOT EXISTS event_type VARCHAR(100) DEFAULT 'general';
+                """
+            ))
         elif dialect == "sqlite":
             # SQLite has no robust ALTER TABLE IF NOT EXISTS for columns.
             result = await conn.execute(text("PRAGMA table_info(events)"))
@@ -49,6 +55,10 @@ async def _apply_schema_patches() -> None:
             if "organizer_email" not in existing_columns:
                 await conn.execute(text(
                     "ALTER TABLE events ADD COLUMN organizer_email VARCHAR(255) DEFAULT ''"
+                ))
+            if "event_type" not in existing_columns:
+                await conn.execute(text(
+                    "ALTER TABLE events ADD COLUMN event_type VARCHAR(100) DEFAULT 'general'"
                 ))
 
 

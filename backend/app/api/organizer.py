@@ -156,6 +156,45 @@ async def _ensure_join_codes(db: AsyncSession, event: Event) -> tuple[EventCode,
     return participant_code, organizer_code
 
 
+async def _sync_event_to_rag_from_postgres(
+    db: AsyncSession,
+    event: Event,
+    schedule_override: dict | None = None,
+) -> int:
+    """
+    Build a richer RAG payload from current PostgreSQL state and sync to Chroma.
+
+    This includes event metadata, operational counts, and resolved organizer FAQs.
+    """
+    participants = await crud.get_participants_by_event(db, event.event_id)
+    open_tickets = await crud.get_priority_queue(db, event.event_id)
+    pending_queries = await crud.get_unresolved_queries(db, event.event_id, status="Pending")
+    resolved_queries = await crud.get_resolved_queries(db, event.event_id)
+
+    resolved_faqs = [
+        {
+            "question": q.question_text,
+            "answer": q.organizer_answer or "",
+        }
+        for q in resolved_queries
+        if q.organizer_answer
+    ]
+
+    return sync_event_data_to_rag(
+        event_id=event.event_id,
+        event_name=event.event_name,
+        event_type=event.event_type or "general",
+        organizer=event.organizer_name,
+        rules=event.event_rules_and_context or "",
+        schedule=schedule_override if schedule_override is not None else (event.master_schedule or {}),
+        status=event.status or "active",
+        participant_count=len(participants),
+        open_ticket_count=len(open_tickets),
+        pending_query_count=len(pending_queries),
+        resolved_faqs=resolved_faqs,
+    )
+
+
 # ---------------------------------------------------------------------------
 # GET /organizer/events  — list all events (with optional filters)
 # ---------------------------------------------------------------------------
@@ -178,6 +217,7 @@ async def list_events(
             EventListItem(
                 event_id=e.event_id,
                 event_name=e.event_name,
+                event_type=e.event_type or "general",
                 organizer_name=e.organizer_name,
                 status=e.status or "active",
                 created_at=e.created_at,
@@ -210,11 +250,14 @@ async def create_event(
     and join_link — all required for downstream operations.
     """
     try:
+        normalized_event_type = (request.event_type or "general").strip().lower()
+
         # Create the event record
         organizer_email = (request.organizer_email or "").strip().lower()
         event = await crud.create_event(
             db,
             event_name=request.event_name,
+            event_type=normalized_event_type,
             organizer_name=request.organizer_name,
             organizer_email=organizer_email,
             event_rules_and_context=request.event_rules_and_context,
@@ -248,19 +291,13 @@ async def create_event(
             f"and organizer code {organizer_code_value}"
         )
 
-        # Sync event rules + schedule to ChromaDB so the chatbot can answer
-        # participant questions immediately after creation.
-        sync_event_data_to_rag(
-            event_id=event.event_id,
-            event_name=event.event_name,
-            organizer=event.organizer_name,
-            rules=event.event_rules_and_context or "",
-            schedule=event.master_schedule or {},
-        )
+        # Sync richer Postgres event context to ChromaDB for stronger retrieval.
+        await _sync_event_to_rag_from_postgres(db, event)
 
         return EventResponse(
             event_id=event.event_id,
             event_name=event.event_name,
+            event_type=event.event_type or "general",
             organizer_name=event.organizer_name,
             organizer_email=event.organizer_email,
             event_rules_and_context=event.event_rules_and_context or "",
@@ -390,6 +427,7 @@ async def get_event_detail(
         return EventDetailResponse(
             event_id=event.event_id,
             event_name=event.event_name,
+            event_type=event.event_type or "general",
             organizer_name=event.organizer_name,
             event_rules_and_context=event.event_rules_and_context or "",
             total_budget_allocated=event.total_budget_allocated,
@@ -432,6 +470,7 @@ async def update_event_status(
         return EventListItem(
             event_id=event.event_id,
             event_name=event.event_name,
+            event_type=event.event_type or "general",
             organizer_name=event.organizer_name,
             status=event.status,
             created_at=event.created_at,
@@ -506,6 +545,7 @@ async def trigger_swarm(
 
         event_context = (
             f"{event.event_name}\n"
+            f"Event Type: {event.event_type or 'general'}\n"
             f"Organizer: {event.organizer_name}\n"
             f"Rules & Context: {event.event_rules_and_context}\n"
             f"Budget: ${event.total_budget_allocated:,.2f}"
@@ -537,14 +577,8 @@ async def trigger_swarm(
         if result.get("schedule_changed_flag"):
             new_schedule = result.get("master_schedule", {})
             await crud.update_event_schedule(db, event_id, new_schedule)
-            # Re-sync updated schedule chunks to ChromaDB
-            sync_event_data_to_rag(
-                event_id=event_id,
-                event_name=event.event_name,
-                organizer=event.organizer_name,
-                rules=event.event_rules_and_context or "",
-                schedule=new_schedule,
-            )
+            # Re-sync updated schedule + latest Postgres context to ChromaDB.
+            await _sync_event_to_rag_from_postgres(db, event, schedule_override=new_schedule)
 
         if result.get("budget_estimate_report"):
             await crud.update_event_budget_report(db, event_id, result.get("budget_estimate_report", {}))
@@ -708,13 +742,7 @@ async def sync_event_to_rag(
         if event is None:
             raise HTTPException(status_code=404, detail=f"Event {event_id} not found.")
 
-        chunks = sync_event_data_to_rag(
-            event_id=event_id,
-            event_name=event.event_name,
-            organizer=event.organizer_name,
-            rules=event.event_rules_and_context or "",
-            schedule=event.master_schedule or {},
-        )
+        chunks = await _sync_event_to_rag_from_postgres(db, event)
 
         logger.info(f"Synced event {event_id} to RAG: {chunks} chunks written.")
         return {"event_id": event_id, "chunks_written": chunks, "status": "synced"}
@@ -1007,14 +1035,8 @@ async def run_scheduler_agent(
         if result.get("schedule_changed_flag"):
             new_schedule = result.get("master_schedule", {})
             await crud.update_event_schedule(db, event_id, new_schedule)
-            # Re-sync updated schedule chunks to ChromaDB
-            sync_event_data_to_rag(
-                event_id=event_id,
-                event_name=event.event_name,
-                organizer=event.organizer_name,
-                rules=event.event_rules_and_context or "",
-                schedule=new_schedule,
-            )
+            # Re-sync updated schedule + latest Postgres context to ChromaDB.
+            await _sync_event_to_rag_from_postgres(db, event, schedule_override=new_schedule)
 
         log_messages = [
             m.content for m in result.get("messages", [])

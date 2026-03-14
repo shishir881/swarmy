@@ -34,6 +34,7 @@ class Event(Base):
 
     event_id = Column(Integer, primary_key=True, autoincrement=True)
     event_name = Column(String(255), nullable=False)
+    event_type = Column(String(100), nullable=False, default="general")
     organizer_name = Column(String(255), nullable=False)
     organizer_email = Column(String(255), nullable=True, default="")
     event_rules_and_context = Column(Text, nullable=True, default="")

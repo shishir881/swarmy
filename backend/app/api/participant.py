@@ -97,6 +97,7 @@ async def join_event(
         return JoinEventResponse(
             event_id=event.event_id,
             event_name=event.event_name,
+            event_type=event.event_type or "general",
             organizer_name=event.organizer_name,
             master_schedule=event.master_schedule or {},
             message=f"Welcome to {event.event_name}! You can view the schedule and ask questions below.",
@@ -130,6 +131,7 @@ async def get_event_timeline(
         return TimelineResponse(
             event_id=event.event_id,
             event_name=event.event_name,
+            event_type=event.event_type or "general",
             master_schedule=event.master_schedule or {},
         )
     except HTTPException:
@@ -167,9 +169,18 @@ async def chat_with_rag(
         # find the exact session or rule without needing raw JSON in the prompt.
         rag_answer, rag_confidence = query_rag(event_id=event_id, question=request.question)
 
-        # ── 2. Build safe minimal context (budget NEVER included) ────────────
+        participants = await crud.get_participants_by_event(db, event_id)
+        open_tickets = await crud.get_priority_queue(db, event_id)
+        pending_queries = await crud.get_unresolved_queries(db, event_id, status="Pending")
+
+        # ── 2. Build safe Postgres context (budget NEVER included) ───────────
         pg_context = f"""EVENT NAME: {event.event_name}
-ORGANIZER: {event.organizer_name}"""
+EVENT TYPE: {event.event_type or 'general'}
+EVENT STATUS: {event.status or 'active'}
+ORGANIZER: {event.organizer_name}
+REGISTERED PARTICIPANTS: {len(participants)}
+OPEN SUPPORT TICKETS: {len(open_tickets)}
+PENDING UNRESOLVED QUERIES: {len(pending_queries)}"""
 
         rag_section = ""
         if rag_answer and rag_confidence >= 0.5:
@@ -256,6 +267,7 @@ async def report_issue(
 
         event_context = (
             f"{event.event_name}\n"
+            f"Event Type: {event.event_type or 'general'}\n"
             f"Organizer: {event.organizer_name}\n"
             f"Rules & Context: {event.event_rules_and_context}\n"
             f"Budget: ${event.total_budget_allocated:,.2f}"
@@ -357,6 +369,7 @@ async def get_event_info(
         return EventInfoResponse(
             event_id=event.event_id,
             event_name=event.event_name,
+            event_type=event.event_type or "general",
             organizer_name=event.organizer_name,
             event_rules_and_context=event.event_rules_and_context or "",
             total_budget_allocated=event.total_budget_allocated,
