@@ -26,8 +26,6 @@ const Dashboard: React.FC = () => {
         borderBottom: "1px solid var(--border)"
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <div style={{ width: 28, height: 28, borderRadius: 8, background: 'var(--lime10)', border: '1px solid var(--lime35)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          </div>
           <span style={{ fontSize: 18, fontWeight: 700, letterSpacing: '-0.01em' }}><span style={{ color: 'var(--green)' }}>mela</span><span style={{ color: 'var(--text)' }}>.ai</span></span>
         </div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>

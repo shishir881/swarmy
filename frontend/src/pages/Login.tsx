@@ -79,17 +79,9 @@ const Login: React.FC = () => {
 
         {/* Logo */}
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 10, marginBottom: 36 }}>
-          <div style={{
-            width: 36, height: 36, borderRadius: 10,
-            background: 'var(--lime10)', border: '1px solid var(--lime35)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center',
-            boxShadow: '0 0 20px rgba(29,158,117,0.2)',
-          }} />
-          <div>
-            <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.01em', fontFamily: "'Syne', sans-serif" }}>
-              <span style={{ color: 'var(--green)' }}>mela</span><span style={{ color: 'var(--text)' }}>.ai</span>
-            </span>
-          </div>
+          <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', letterSpacing: '-0.01em', fontFamily: "'Syne', sans-serif" }}>
+            <span style={{ color: 'var(--green)' }}>mela</span><span style={{ color: 'var(--text)' }}>.ai</span>
+          </span>
         </div>
 
         {/* Tab Switch */}

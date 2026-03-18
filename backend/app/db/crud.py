@@ -99,12 +99,27 @@ async def get_all_events(
     """
     List all events, optionally filtered by organizer_name and/or status.
 
+    When organizer_name is provided, returns events where the user is
+    either the primary organizer OR a co-organizer (member of
+    organizer_team_members).
+
     Returns events ordered by created_at descending (newest first).
     """
-    from sqlalchemy import desc
+    from sqlalchemy import desc, or_
     stmt = select(Event).order_by(desc(Event.created_at))
     if organizer_name:
-        stmt = stmt.where(Event.organizer_name == organizer_name)
+        # Include events where user is the primary organizer
+        # OR where user is a co-organizer in the team members table
+        co_org_event_ids = (
+            select(OrganizerTeamMember.event_id)
+            .where(OrganizerTeamMember.email == organizer_name)
+        )
+        stmt = stmt.where(
+            or_(
+                Event.organizer_name == organizer_name,
+                Event.event_id.in_(co_org_event_ids),
+            )
+        )
     if status:
         stmt = stmt.where(Event.status == status)
     result = await db.execute(stmt)
